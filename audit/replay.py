@@ -14,7 +14,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 
+from dotenv import load_dotenv
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from common.db import db_conn, replay_events
@@ -32,7 +34,10 @@ async def list_threads() -> None:
                    pr_url,
                    MIN(timestamp)        AS started,
                    MAX(timestamp)        AS last_event,
-                   MAX(risk_level)       AS worst_risk,
+                   CASE MAX(CASE risk_level
+                       WHEN 'high' THEN 3 WHEN 'med' THEN 2 ELSE 1 END)
+                       WHEN 3 THEN 'high' WHEN 2 THEN 'med' ELSE 'low'
+                   END                   AS worst_risk,
                    COUNT(*)              AS events
               FROM audit_events
              GROUP BY thread_id, pr_url
@@ -69,8 +74,8 @@ async def replay(thread_id: str) -> None:
     for ev in events:
         risk = ev["risk_level"]
         risk_colored = f"[{RISK_COLOR.get(risk, 'white')}]{risk:<4}[/]"
-        reviewer = ev["reviewer_id"] or "-"
-        reason = (ev["reason"] or "")[:60]
+        reviewer = escape(ev["reviewer_id"] or "-")
+        reason = escape((ev["reason"] or "")[:60])
         console.print(
             f"[dim]{ev['timestamp']}[/dim]  "
             f"[cyan]{ev['action']:<18}[/cyan] "
@@ -84,6 +89,7 @@ async def replay(thread_id: str) -> None:
 
 
 def main() -> None:
+    load_dotenv()
     parser = argparse.ArgumentParser()
     parser.add_argument("--thread", help="Replay one thread by id")
     parser.add_argument("--list", action="store_true", help="List recent threads")
